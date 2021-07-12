@@ -2,7 +2,7 @@
 //!
 //! This crate implements file encryption according to the [age-encryption.org/v1]
 //! specification. It generates and consumes encrypted files that are compatible with the
-//! [rage] CLI tool, as well as the reference [Golang] implementation.
+//! [rage] CLI tool, as well as the reference [Go] implementation.
 //!
 //! The encryption and decryption APIs are provided by [`Encryptor`] and [`Decryptor`].
 //! There are several ways to use these:
@@ -21,7 +21,7 @@
 //!
 //! [age-encryption.org/v1]: https://age-encryption.org/v1
 //! [rage]: https://crates.io/crates/rage
-//! [Golang]: https://filippo.io/age
+//! [Go]: https://filippo.io/age
 //!
 //! # Examples
 //!
@@ -135,7 +135,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![forbid(unsafe_code)]
 // Catch documentation errors caused by code changes.
-#![deny(intra_doc_link_resolution_failure)]
+#![deny(broken_intra_doc_links)]
 #![deny(missing_docs)]
 
 mod error;

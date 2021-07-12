@@ -11,7 +11,7 @@ age-dev@googlegroups.com. age was designed by
 [@Benjojo12](https://twitter.com/Benjojo12) and
 [@FiloSottile](https://twitter.com/FiloSottile).
 
-The reference interoperable Golang implementation is available at
+The reference interoperable Go implementation is available at
 [filippo.io/age](https://filippo.io/age).
 
 ## Usage
@@ -116,7 +116,7 @@ brew install rage
 On Windows, Linux, and macOS, you can use the
 [pre-built binaries](https://github.com/str4d/rage/releases).
 
-If your system has Rust 1.47+ installed (either via `rustup` or a system
+If your system has Rust 1.49+ installed (either via `rustup` or a system
 package), you can build directly from source:
 
 ```

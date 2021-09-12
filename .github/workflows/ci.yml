@@ -91,16 +91,14 @@ jobs:
           toolchain: stable
           override: true
       - name: Install linux build dependencies
-        run: sudo apt install libfuse-dev libpcsclite-dev
+        run: sudo apt install libfuse-dev
       - name: Generate coverage report
         uses: actions-rs/tarpaulin@v0.1
         with:
           version: '0.13.3'
           args: --all --release --all-features --timeout 180 --out Xml
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v1.0.3
-        with:
-          token: ${{secrets.CODECOV_TOKEN}}
+        uses: codecov/codecov-action@v2.0.3
 
   doc-links:
     name: Nightly lint

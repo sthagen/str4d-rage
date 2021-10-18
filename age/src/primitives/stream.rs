@@ -1,11 +1,11 @@
 //! I/O helper structs for age file encryption and decryption.
 
+use age_core::secrecy::{ExposeSecret, SecretVec};
 use chacha20poly1305::{
     aead::{generic_array::GenericArray, Aead, NewAead},
     ChaCha20Poly1305,
 };
 use pin_project::pin_project;
-use secrecy::{ExposeSecret, SecretVec};
 use std::cmp;
 use std::convert::TryInto;
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -74,6 +74,7 @@ impl Nonce {
 }
 
 #[cfg(feature = "async")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 struct EncryptedChunk {
     bytes: Vec<u8>,
     offset: usize,
@@ -124,6 +125,7 @@ impl Stream {
     ///
     /// [`HKDF`]: age_core::primitives::hkdf
     #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub(crate) fn encrypt_async<W: AsyncWrite>(key: PayloadKey, inner: W) -> StreamWriter<W> {
         StreamWriter {
             stream: Self::new(key),
@@ -161,6 +163,7 @@ impl Stream {
     ///
     /// [`HKDF`]: age_core::primitives::hkdf
     #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub(crate) fn decrypt_async<R: AsyncRead>(key: PayloadKey, inner: R) -> StreamReader<R> {
         StreamReader {
             stream: Self::new(key),
@@ -223,6 +226,7 @@ pub struct StreamWriter<W> {
     inner: W,
     chunk: Vec<u8>,
     #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     encrypted_chunk: Option<EncryptedChunk>,
 }
 
@@ -270,6 +274,7 @@ impl<W: Write> Write for StreamWriter<W> {
 }
 
 #[cfg(feature = "async")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 impl<W: AsyncWrite> StreamWriter<W> {
     fn poll_flush_chunk(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
         let StreamWriterProj {
@@ -294,6 +299,7 @@ impl<W: AsyncWrite> StreamWriter<W> {
 }
 
 #[cfg(feature = "async")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 impl<W: AsyncWrite> AsyncWrite for StreamWriter<W> {
     fn poll_write(
         mut self: Pin<&mut Self>,
@@ -465,6 +471,7 @@ impl<R: Read> Read for StreamReader<R> {
 }
 
 #[cfg(feature = "async")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 impl<R: AsyncRead + Unpin> AsyncRead for StreamReader<R> {
     fn poll_read(
         mut self: Pin<&mut Self>,
@@ -636,7 +643,7 @@ impl<R: Read + Seek> Seek for StreamReader<R> {
 
 #[cfg(test)]
 mod tests {
-    use secrecy::ExposeSecret;
+    use age_core::secrecy::ExposeSecret;
     use std::io::{self, Cursor, Read, Seek, SeekFrom, Write};
 
     use super::{PayloadKey, Stream, CHUNK_SIZE};

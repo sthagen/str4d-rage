@@ -5,7 +5,9 @@ use age::{
     cli_common::{
         file_io, read_identities, read_or_generate_passphrase, read_secret, Passphrase, UiCallbacks,
     },
-    plugin, Identity, IdentityFile, IdentityFileEntry, Recipient,
+    plugin,
+    secrecy::ExposeSecret,
+    Identity, IdentityFile, IdentityFileEntry, Recipient,
 };
 use gumdrop::{Options, ParsingStyle};
 use i18n_embed::{
@@ -14,7 +16,6 @@ use i18n_embed::{
 };
 use lazy_static::lazy_static;
 use rust_embed::RustEmbed;
-use secrecy::ExposeSecret;
 use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
@@ -408,14 +409,7 @@ fn decrypt(opts: AgeOptions) -> Result<(), error::DecryptError> {
         }
         age::Decryptor::Recipients(decryptor) => {
             let identities = if opts.plugin_name.is_empty() {
-                read_identities(
-                    opts.identity,
-                    opts.max_work_factor,
-                    error::DecryptError::IdentityNotFound,
-                    error::DecryptError::IdentityEncryptedWithoutPassphrase,
-                    #[cfg(feature = "ssh")]
-                    error::DecryptError::UnsupportedKey,
-                )?
+                read_identities(opts.identity, opts.max_work_factor)?
             } else {
                 // Construct the default plugin.
                 vec![Box::new(plugin::IdentityPluginV1::new(

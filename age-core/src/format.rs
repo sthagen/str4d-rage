@@ -1,3 +1,5 @@
+//! Core types and encoding operations used by the age file format.
+
 use rand::{
     distributions::{Distribution, Uniform},
     thread_rng, RngCore,
@@ -126,6 +128,7 @@ pub fn grease_the_joint() -> Stanza {
     Stanza { tag, args, body }
 }
 
+/// Decoding operations for age types.
 pub mod read {
     use nom::{
         branch::alt,
@@ -141,13 +144,15 @@ pub mod read {
 
     fn is_base64_char(c: u8) -> bool {
         // Check against the ASCII values of the standard Base64 character set.
-        match c {
+        matches!(
+            c,
             // A..=Z | a..=z | 0..=9 | + | /
-            65..=90 | 97..=122 | 48..=57 | 43 | 47 => true,
-            _ => false,
-        }
+            65..=90 | 97..=122 | 48..=57 | 43 | 47,
+        )
     }
 
+    /// Reads an age "arbitrary string".
+    ///
     /// From the age specification:
     /// ```text
     /// ... an arbitrary string is a sequence of ASCII characters with values 33 to 126.
@@ -201,7 +206,7 @@ pub mod read {
     /// recipient stanza is a body of canonical base64 from RFC 4648 without padding
     /// wrapped at exactly 64 columns.
     /// ```
-    pub fn age_stanza<'a>(input: &'a [u8]) -> IResult<&'a [u8], AgeStanza<'a>> {
+    pub fn age_stanza(input: &[u8]) -> IResult<&[u8], AgeStanza<'_>> {
         map(
             pair(
                 preceded(
@@ -217,7 +222,7 @@ pub mod read {
         )(input)
     }
 
-    fn legacy_age_stanza_inner<'a>(input: &'a [u8]) -> IResult<&'a [u8], AgeStanza<'a>> {
+    fn legacy_age_stanza_inner(input: &[u8]) -> IResult<&[u8], AgeStanza<'_>> {
         map(
             pair(
                 preceded(tag(STANZA_TAG), separated_list1(tag(" "), arbitrary_string)),
@@ -254,7 +259,7 @@ pub mod read {
     /// age files encrypted with beta versions of the `age` or `rage` crates.
     ///
     /// [`grease_the_joint`]: super::grease_the_joint
-    pub fn legacy_age_stanza<'a>(input: &'a [u8]) -> IResult<&'a [u8], AgeStanza<'a>> {
+    pub fn legacy_age_stanza(input: &[u8]) -> IResult<&[u8], AgeStanza<'_>> {
         alt((age_stanza, legacy_age_stanza_inner))(input)
     }
 
@@ -273,6 +278,7 @@ pub mod read {
     }
 }
 
+/// Encoding operations for age types.
 pub mod write {
     use cookie_factory::{
         combinator::string,

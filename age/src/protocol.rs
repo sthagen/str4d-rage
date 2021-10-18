@@ -1,8 +1,7 @@
 //! Encryption and decryption routines for age.
 
-use age_core::format::grease_the_joint;
+use age_core::{format::grease_the_joint, secrecy::SecretString};
 use rand::{rngs::OsRng, RngCore};
-use secrecy::SecretString;
 use std::io::{self, Read, Write};
 
 use crate::{
@@ -40,6 +39,7 @@ impl Nonce {
     }
 
     #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     async fn read_async<R: AsyncRead + Unpin>(input: &mut R) -> io::Result<Self> {
         let mut nonce = [0; 16];
         input.read_exact(&mut nonce).await?;
@@ -193,6 +193,7 @@ impl<R: Read> Decryptor<R> {
 }
 
 #[cfg(feature = "async")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 impl<R: AsyncRead + Unpin> Decryptor<R> {
     /// Attempts to create a decryptor for an age file.
     ///
@@ -212,7 +213,7 @@ impl<R: AsyncRead + Unpin> Decryptor<R> {
 
 #[cfg(test)]
 mod tests {
-    use secrecy::SecretString;
+    use age_core::secrecy::SecretString;
     use std::io::{BufReader, Read, Write};
 
     #[cfg(feature = "ssh")]

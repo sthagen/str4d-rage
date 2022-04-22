@@ -7,13 +7,16 @@ use rand::{
     rngs::OsRng,
     CryptoRng, RngCore,
 };
-use rpassword::read_password_from_tty;
+use rpassword::prompt_password;
 use std::fmt;
 use std::fs::File;
 use std::io::{self, BufReader};
 use subtle::ConstantTimeEq;
 
-use crate::{armor::ArmoredReader, fl, identity::IdentityFile, wfl, Callbacks, Identity};
+use crate::{fl, identity::IdentityFile, wfl, Callbacks, Identity};
+
+#[cfg(feature = "armor")]
+use crate::armor::ArmoredReader;
 
 pub mod file_io;
 
@@ -108,6 +111,7 @@ pub fn read_identities(
     let mut identities: Vec<Box<dyn Identity>> = vec![];
 
     for filename in filenames {
+        #[cfg(feature = "armor")]
         // Try parsing as an encrypted age identity.
         if let Ok(identity) = crate::encrypted::Identity::from_buffer(
             ArmoredReader::new(BufReader::new(File::open(&filename)?)),
@@ -138,6 +142,8 @@ pub fn read_identities(
             }
             Err(_) => (),
         }
+        // IdentityFileEntry::into_identity will never return a MissingPlugin error
+        // when plugin feature is not enabled.
 
         // Try parsing as multiple single-line age identities.
         let identity_file =
@@ -147,14 +153,23 @@ pub fn read_identities(
             })?;
 
         for entry in identity_file.into_identities() {
-            identities.push(entry.into_identity(UiCallbacks).map_err(|e| match e {
+            let entry = entry.into_identity(UiCallbacks);
+
+            #[cfg(feature = "plugin")]
+            let entry = entry.map_err(|e| match e {
+                #[cfg(feature = "plugin")]
                 crate::DecryptError::MissingPlugin { binary_name } => {
                     ReadError::MissingPlugin { binary_name }
                 }
                 // DecryptError::MissingPlugin is the only possible error kind returned by
                 // IdentityFileEntry::into_identity.
                 _ => unreachable!(),
-            })?);
+            })?;
+
+            #[cfg(not(feature = "plugin"))]
+            let entry = entry.unwrap();
+
+            identities.push(entry);
         }
     }
 
@@ -199,11 +214,10 @@ pub fn read_secret(
         input.interact()
     } else {
         // Fall back to CLI interface.
-        let passphrase =
-            read_password_from_tty(Some(&format!("{}: ", description))).map(SecretString::new)?;
+        let passphrase = prompt_password(format!("{}: ", description)).map(SecretString::new)?;
         if let Some(confirm_prompt) = confirm {
-            let confirm_passphrase = read_password_from_tty(Some(&format!("{}: ", confirm_prompt)))
-                .map(SecretString::new)?;
+            let confirm_passphrase =
+                prompt_password(format!("{}: ", confirm_prompt)).map(SecretString::new)?;
 
             if !bool::from(
                 passphrase

@@ -16,7 +16,6 @@ use i18n_embed::{
 };
 use lazy_static::lazy_static;
 use rust_embed::RustEmbed;
-use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::Path;
@@ -37,6 +36,19 @@ lazy_static! {
 macro_rules! fl {
     ($message_id:literal) => {{
         i18n_embed_fl::fl!($crate::LANGUAGE_LOADER, $message_id)
+    }};
+}
+
+macro_rules! warning {
+    ($warning_id:literal) => {{
+        eprintln!(
+            "{}",
+            i18n_embed_fl::fl!(
+                $crate::LANGUAGE_LOADER,
+                "warning-msg",
+                warning = fl!($warning_id)
+            )
+        );
     }};
 }
 
@@ -243,6 +255,62 @@ struct AgeOptions {
     output: Option<String>,
 }
 
+fn set_up_io(
+    input: Option<String>,
+    output: Option<String>,
+    output_format: file_io::OutputFormat,
+) -> io::Result<(file_io::InputReader, file_io::OutputWriter)> {
+    let input = file_io::InputReader::new(input)?;
+
+    // Create an output to the user-requested location.
+    let output = file_io::OutputWriter::new(output, output_format, 0o666, input.is_terminal())?;
+
+    Ok((input, output))
+}
+
+type ReadCheckerMatchCase = (&'static [u8], Box<dyn FnOnce() -> io::Result<()>>);
+type ReadCheckerMatcher = Option<(&'static [u8], usize, Box<dyn FnOnce() -> io::Result<()>>)>;
+
+/// A wrapper around a reader that checks it for various prefixes.
+struct ReadChecker<R: io::Read, const N: usize> {
+    inner: R,
+    matches: [ReadCheckerMatcher; N],
+}
+
+impl<R: io::Read, const N: usize> ReadChecker<R, N> {
+    fn new(inner: R, matches: [ReadCheckerMatchCase; N]) -> Self {
+        Self {
+            inner,
+            matches: matches.map(|(prefix, on_match)| Some((prefix, 0, on_match))),
+        }
+    }
+}
+
+impl<R: io::Read, const N: usize> io::Read for ReadChecker<R, N> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let read = self.inner.read(buf)?;
+        let data = &buf[..read];
+
+        for matcher in &mut self.matches {
+            if let Some((prefix, start, on_match)) = matcher.take() {
+                let to_check = &prefix[start..];
+                if to_check.len() > data.len() {
+                    // We haven't read enough data to verify a full match; check for a
+                    // partial match, and update the matched counter so we keep checking.
+                    if to_check.starts_with(data) {
+                        *matcher = Some((prefix, start + data.len(), on_match));
+                    }
+                } else if data.starts_with(to_check) {
+                    on_match()?;
+                    // Don't set matched so we stop checking.
+                }
+            }
+        }
+
+        Ok(read)
+    }
+}
+
 fn encrypt(opts: AgeOptions) -> Result<(), error::EncryptError> {
     if !opts.plugin_name.is_empty() {
         return Err(error::EncryptError::PluginNameFlag);
@@ -302,16 +370,14 @@ fn encrypt(opts: AgeOptions) -> Result<(), error::EncryptError> {
         )?)
     };
 
-    let mut input = file_io::InputReader::new(opts.input)?;
-
     let (format, output_format) = if opts.armor {
         (Format::AsciiArmor, file_io::OutputFormat::Text)
     } else {
         (Format::Binary, file_io::OutputFormat::Binary)
     };
 
-    // Create an output to the user-requested location.
-    let output = file_io::OutputWriter::new(opts.output, output_format, 0o666)?;
+    let (input, output) = set_up_io(opts.input, opts.output, output_format)?;
+
     let is_stdout = match output {
         file_io::OutputWriter::File(..) => false,
         file_io::OutputWriter::Stdout(..) => true,
@@ -328,7 +394,24 @@ fn encrypt(opts: AgeOptions) -> Result<(), error::EncryptError> {
         _ => e.into(),
     };
 
-    io::copy(&mut input, &mut output).map_err(map_io_errors)?;
+    const AGE_MAGIC: &[u8] = b"age-encryption.org/";
+    const ARMORED_BEGIN_MARKER: &[u8] = b"-----BEGIN AGE ENCRYPTED FILE-----";
+    let warn_double_encrypting = Box::new(|| {
+        warning!("warn-double-encrypting");
+        Ok(())
+    });
+
+    io::copy(
+        &mut ReadChecker::new(
+            input,
+            [
+                (AGE_MAGIC, warn_double_encrypting.clone()),
+                (ARMORED_BEGIN_MARKER, warn_double_encrypting),
+            ],
+        ),
+        &mut output,
+    )
+    .map_err(map_io_errors)?;
     output
         .finish()
         .and_then(|armor| armor.finish())
@@ -337,12 +420,10 @@ fn encrypt(opts: AgeOptions) -> Result<(), error::EncryptError> {
     Ok(())
 }
 
-fn write_output<R: io::Read>(
+fn write_output<R: io::Read, W: io::Write>(
     mut input: R,
-    output: Option<String>,
+    mut output: W,
 ) -> Result<(), error::DecryptError> {
-    let mut output = file_io::OutputWriter::new(output, file_io::OutputFormat::Unknown, 0o666)?;
-
     io::copy(&mut input, &mut output)?;
 
     Ok(())
@@ -367,12 +448,33 @@ fn decrypt(opts: AgeOptions) -> Result<(), error::DecryptError> {
         return Err(error::DecryptError::MixedIdentityAndPluginName);
     }
 
-    let output = opts.output;
-
     #[cfg(not(unix))]
     let has_file_argument = opts.input.is_some();
 
-    match age::Decryptor::new(ArmoredReader::new(file_io::InputReader::new(opts.input)?))? {
+    let (input, output) = set_up_io(opts.input, opts.output, file_io::OutputFormat::Unknown)?;
+
+    // CRLF_MANGLED_INTRO and UTF16_MANGLED_INTRO are the intro lines of the age format after
+    // mangling by various versions of PowerShell redirection, truncated to the length of the
+    // correct intro line. See https://github.com/FiloSottile/age/issues/290 for more info.
+    const CRLF_MANGLED_INTRO: &[u8] = b"age-encryption.org/v1\r";
+    const UTF16_MANGLED_INTRO: &[u8] =
+        b"\xff\xfea\x00g\x00e\x00-\x00e\x00n\x00c\x00r\x00y\x00p\x00";
+    let err_powershell_corruption = Box::new(|| {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            error::DetectedPowerShellCorruptionError,
+        ))
+    });
+
+    let input = ReadChecker::new(
+        input,
+        [
+            (CRLF_MANGLED_INTRO, err_powershell_corruption.clone()),
+            (UTF16_MANGLED_INTRO, err_powershell_corruption),
+        ],
+    );
+
+    match age::Decryptor::new(ArmoredReader::new(input))? {
         age::Decryptor::Passphrase(decryptor) => {
             // The `rpassword` crate opens `/dev/tty` directly on Unix, so we don't have
             // any conflict with stdin.

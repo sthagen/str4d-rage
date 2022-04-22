@@ -16,15 +16,15 @@ jobs:
           -H 'Authorization: token ${{ secrets.AGE_STATUS_ACCESS_TOKEN }}' \
           --data '{"state": "pending", "target_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}", "description": "In progress", "context": "Interoperability tests / Build rage"}'
 
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.51.0
+          toolchain: 1.56.0
           override: true
       - name: cargo build
         run: cargo build --release --features unstable
         working-directory: ./rage
-      - uses: actions/upload-artifact@v2.2.4
+      - uses: actions/upload-artifact@v3
         with:
           name: rage
           path: target/release/rage
@@ -64,7 +64,7 @@ jobs:
         run: echo "AGE_REF=refs/heads/main" >> $GITHUB_ENV
 
       - name: Check out FiloSottile/age
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: FiloSottile/age
           ref: ${{ env.AGE_REF }}
@@ -73,7 +73,7 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/go-age/age
           go build filippo.io/age/cmd/age
-      - uses: actions/upload-artifact@v2.2.4
+      - uses: actions/upload-artifact@v3
         with:
           name: age
           path: go-age/age/age
@@ -107,14 +107,14 @@ jobs:
           --data '{"state": "pending", "target_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}", "description": "In progress", "context": "Interoperability tests / ${{ matrix.alice }} -> ${{ matrix.bob }} [${{ matrix.recipient }}]"}'
 
       # Download the binaries to test
-      - uses: actions/download-artifact@v1
+      - uses: actions/download-artifact@v3
         with:
           name: rage
-      - uses: actions/download-artifact@v1
+      - uses: actions/download-artifact@v3
         with:
           name: age
-      - run: chmod +x rage/rage
-      - run: chmod +x age/age
+      - run: chmod +x rage
+      - run: chmod +x age
 
       # Prepare the test environment
       - name: Install dos2unix for simulating Windows files
@@ -135,18 +135,18 @@ jobs:
         if: matrix.recipient == 'ssh-rsa' || matrix.recipient == 'ssh-ed25519'
         run: echo "AGE_PUBKEY=-R key.txt.pub" >> $GITHUB_ENV
       - name: Store key.txt in case we need it
-        uses: actions/upload-artifact@v2.2.4
+        uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.alice }}_${{ matrix.bob }}_${{ matrix.recipient }}_key.txt
           path: key.txt
 
       # Tests!
       - name: Encrypt to file
-        run: echo "Test string" | ${{ matrix.alice }}/${{ matrix.alice }} -o test.age $AGE_PUBKEY
+        run: echo "Test string" | ./${{ matrix.alice }} -o test.age $AGE_PUBKEY
       - name: Decrypt from file
-        run: ${{ matrix.bob }}/${{ matrix.bob }} -d -i key.txt test.age | grep -q "^Test string$"
+        run: ./${{ matrix.bob }} -d -i key.txt test.age | grep -q "^Test string$"
       - name: Store test.age
-        uses: actions/upload-artifact@v2.2.4
+        uses: actions/upload-artifact@v3
         if: failure()
         with:
           name: ${{ matrix.alice }}_${{ matrix.bob }}_${{ matrix.recipient }}_test.age
@@ -155,11 +155,11 @@ jobs:
       - name: Generate a file to encrypt
         run: echo "2 test 2 string" > test2.txt
       - name: Encrypt to ASCII-armored file
-        run: ${{ matrix.alice }}/${{ matrix.alice }} -a -o test2.age $AGE_PUBKEY test2.txt
+        run: ./${{ matrix.alice }} -a -o test2.age $AGE_PUBKEY test2.txt
       - name: Decrypt from ASCII-armored file
-        run: ${{ matrix.bob }}/${{ matrix.bob }} -d -i key.txt test2.age | grep -q "^2 test 2 string$"
+        run: ./${{ matrix.bob }} -d -i key.txt test2.age | grep -q "^2 test 2 string$"
       - name: Store test2.age
-        uses: actions/upload-artifact@v2.2.4
+        uses: actions/upload-artifact@v3
         if: failure()
         with:
           name: ${{ matrix.alice }}_${{ matrix.bob }}_${{ matrix.recipient }}_test2.age
@@ -168,29 +168,29 @@ jobs:
       - name: Convert file to CRLF
         run: unix2dos test2.age
       - name: Decrypt from ASCII-armored CRLF file
-        run: ${{ matrix.bob }}/${{ matrix.bob }} -d -i key.txt test2.age | grep -q "^2 test 2 string$"
+        run: ./${{ matrix.bob }} -d -i key.txt test2.age | grep -q "^2 test 2 string$"
       - name: Store CRLF-ed test2.age
-        uses: actions/upload-artifact@v2.2.4
+        uses: actions/upload-artifact@v3
         if: failure()
         with:
           name: ${{ matrix.alice }}_${{ matrix.bob }}_${{ matrix.recipient }}_test2.age
           path: test2.age
 
       - name: Pipes!
-        run: echo "Test string 3 - ASCII Drift" | ${{ matrix.alice }}/${{ matrix.alice }} $AGE_PUBKEY | tee --output-error=warn test3.age | ${{ matrix.bob }}/${{ matrix.bob }} -d -i key.txt | grep -q "^Test string 3 - ASCII Drift$"
+        run: echo "Test string 3 - ASCII Drift" | ./${{ matrix.alice }} $AGE_PUBKEY | tee --output-error=warn test3.age | ./${{ matrix.bob }} -d -i key.txt | grep -q "^Test string 3 - ASCII Drift$"
       - name: Store test3.age
-        uses: actions/upload-artifact@v2.2.4
+        uses: actions/upload-artifact@v3
         if: failure()
         with:
           name: ${{ matrix.alice }}_${{ matrix.bob }}_${{ matrix.recipient }}_test3.age
           path: test3.age
 
       - name: Explicit stdout during encryption
-        run: ${{ matrix.alice }}/${{ matrix.alice }} -a -o - $AGE_PUBKEY test2.txt >test4.age
+        run: ./${{ matrix.alice }} -a -o - $AGE_PUBKEY test2.txt >test4.age
       - name: Explicit stdin during decryption
-        run: cat test4.age | ${{ matrix.bob }}/${{ matrix.bob }} -d -i key.txt - | grep -q "^2 test 2 string$"
+        run: cat test4.age | ./${{ matrix.bob }} -d -i key.txt - | grep -q "^2 test 2 string$"
       - name: Store test4.age
-        uses: actions/upload-artifact@v2.2.4
+        uses: actions/upload-artifact@v3
         if: failure()
         with:
           name: ${{ matrix.alice }}_${{ matrix.bob }}_${{ matrix.recipient }}_test4.age

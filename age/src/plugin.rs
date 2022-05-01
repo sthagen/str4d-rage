@@ -7,11 +7,15 @@ use age_core::{
     secrecy::ExposeSecret,
 };
 use bech32::Variant;
+use i18n_embed_fl::fl;
 use std::fmt;
 use std::io;
 use std::iter;
 use std::path::PathBuf;
 use std::process::{ChildStdin, ChildStdout};
+use std::sync::mpsc;
+use std::thread;
+use std::time::{Duration, SystemTime};
 
 use crate::{
     error::{DecryptError, EncryptError, PluginError},
@@ -26,12 +30,54 @@ const PLUGIN_IDENTITY_PREFIX: &str = "age-plugin-";
 const CMD_ERROR: &str = "error";
 const CMD_RECIPIENT_STANZA: &str = "recipient-stanza";
 const CMD_MSG: &str = "msg";
+const CMD_CONFIRM: &str = "confirm";
 const CMD_REQUEST_PUBLIC: &str = "request-public";
 const CMD_REQUEST_SECRET: &str = "request-secret";
 const CMD_FILE_KEY: &str = "file-key";
 
+const ONE_HUNDRED_MS: Duration = Duration::from_millis(100);
+const TEN_SECONDS: Duration = Duration::from_secs(10);
+
 fn binary_name(plugin_name: &str) -> String {
     format!("age-plugin-{}", plugin_name)
+}
+
+struct SlowPluginGuard(mpsc::Sender<()>);
+
+impl SlowPluginGuard {
+    /// Starts a thread to print out a progress message after 10 seconds if the plugin
+    /// hasn't finished.
+    ///
+    /// Returns a guard that can be dropped once the plugin finishes to cancel the timer.
+    fn new<C: Callbacks>(callbacks: C, plugin_binary_name: String) -> Self {
+        // We use a channel to detect when the guard is dropped.
+        let (send, recv) = mpsc::channel::<()>();
+
+        thread::spawn(move || {
+            let start = SystemTime::now();
+            loop {
+                // If the send side of the channel has been dropped, we've been cancelled.
+                if matches!(recv.try_recv(), Err(mpsc::TryRecvError::Disconnected)) {
+                    break;
+                }
+
+                // If we've waited long enough, emit the progress message and exit.
+                match SystemTime::now().duration_since(start) {
+                    Ok(end) if end >= TEN_SECONDS => {
+                        callbacks.display_message(&fl!(
+                            crate::i18n::LANGUAGE_LOADER,
+                            "plugin-waiting-on-binary",
+                            binary_name = plugin_binary_name,
+                        ));
+                        break;
+                    }
+                    _ => thread::sleep(ONE_HUNDRED_MS),
+                }
+            }
+        });
+
+        SlowPluginGuard(send)
+    }
 }
 
 /// A plugin-compatible recipient.
@@ -140,7 +186,10 @@ impl Identity {
 }
 
 /// An age plugin.
-struct Plugin(PathBuf);
+struct Plugin {
+    binary_name: String,
+    path: PathBuf,
+}
 
 impl Plugin {
     /// Finds the age plugin with the given name in `$PATH`.
@@ -148,26 +197,26 @@ impl Plugin {
     /// On error, returns the binary name that could not be located.
     fn new(name: &str) -> Result<Self, String> {
         let binary_name = binary_name(name);
-        which::which(&binary_name)
-            .or_else(|e| {
-                // If we are running in WSL, try appending `.exe`; plugins installed in
-                // the Windows host are available to us, but `which` only trials PATHEXT
-                // extensions automatically when compiled for Windows.
-                if wsl::is_wsl() {
-                    which::which(format!("{}.exe", binary_name)).map_err(|_| e)
-                } else {
-                    Err(e)
-                }
-            })
-            .map(Plugin)
-            .map_err(|_| binary_name)
+        match which::which(&binary_name).or_else(|e| {
+            // If we are running in WSL, try appending `.exe`; plugins installed in
+            // the Windows host are available to us, but `which` only trials PATHEXT
+            // extensions automatically when compiled for Windows.
+            if wsl::is_wsl() {
+                which::which(format!("{}.exe", binary_name)).map_err(|_| e)
+            } else {
+                Err(e)
+            }
+        }) {
+            Ok(path) => Ok(Plugin { binary_name, path }),
+            Err(_) => Err(binary_name),
+        }
     }
 
     fn connect(
         &self,
         state_machine: &str,
     ) -> io::Result<Connection<DebugReader<ChildStdout>, DebugWriter<ChildStdin>>> {
-        Connection::open(&self.0, state_machine)
+        Connection::open(&self.path, state_machine)
     }
 }
 
@@ -219,6 +268,8 @@ impl<C: Callbacks> crate::Recipient for RecipientPluginV1<C> {
         // Open connection
         let mut conn = self.plugin.connect(RECIPIENT_V1)?;
 
+        let _guard = SlowPluginGuard::new(self.callbacks.clone(), self.plugin.binary_name.clone());
+
         // Phase 1: add recipients, identities, and file key to wrap
         conn.unidir_send(|mut phase| {
             for recipient in &self.recipients {
@@ -236,6 +287,7 @@ impl<C: Callbacks> crate::Recipient for RecipientPluginV1<C> {
         if let Err(e) = conn.bidir_receive(
             &[
                 CMD_MSG,
+                CMD_CONFIRM,
                 CMD_REQUEST_PUBLIC,
                 CMD_REQUEST_SECRET,
                 CMD_RECIPIENT_STANZA,
@@ -246,6 +298,33 @@ impl<C: Callbacks> crate::Recipient for RecipientPluginV1<C> {
                     self.callbacks
                         .display_message(&String::from_utf8_lossy(&command.body));
                     reply.ok(None)
+                }
+                CMD_CONFIRM => {
+                    let message = String::from_utf8_lossy(&command.body);
+                    let (yes_string, no_string) = match &command.args[..] {
+                        [] => {
+                            errors.push(PluginError::Other {
+                                kind: "internal".to_owned(),
+                                metadata: vec![],
+                                message: format!(
+                                    "{} command must have at least one metadata argument",
+                                    CMD_CONFIRM
+                                ),
+                            });
+                            return reply.fail();
+                        }
+                        [yes_string] => (yes_string, None),
+                        [yes_string, no_string, ..] => (yes_string, Some(no_string)),
+                    };
+                    if let Some(value) = self.callbacks.confirm(
+                        &message,
+                        yes_string,
+                        no_string.as_ref().map(|s| s.as_str()),
+                    ) {
+                        reply.ok(Some(if value { "yes" } else { "no" }.as_bytes()))
+                    } else {
+                        reply.fail()
+                    }
                 }
                 CMD_REQUEST_PUBLIC => {
                     if let Some(value) = self
@@ -382,6 +461,8 @@ impl<C: Callbacks> IdentityPluginV1<C> {
         // by returning `None`.
         let mut conn = self.plugin.connect(IDENTITY_V1).ok()?;
 
+        let _guard = SlowPluginGuard::new(self.callbacks.clone(), self.plugin.binary_name.clone());
+
         // Phase 1: add identities and stanzas
         if let Err(e) = conn.unidir_send(|mut phase| {
             for identity in &self.identities {
@@ -401,6 +482,7 @@ impl<C: Callbacks> IdentityPluginV1<C> {
         if let Err(e) = conn.bidir_receive(
             &[
                 CMD_MSG,
+                CMD_CONFIRM,
                 CMD_REQUEST_PUBLIC,
                 CMD_REQUEST_SECRET,
                 CMD_FILE_KEY,
@@ -411,6 +493,33 @@ impl<C: Callbacks> IdentityPluginV1<C> {
                     self.callbacks
                         .display_message(&String::from_utf8_lossy(&command.body));
                     reply.ok(None)
+                }
+                CMD_CONFIRM => {
+                    let message = String::from_utf8_lossy(&command.body);
+                    let (yes_string, no_string) = match &command.args[..] {
+                        [] => {
+                            errors.push(PluginError::Other {
+                                kind: "internal".to_owned(),
+                                metadata: vec![],
+                                message: format!(
+                                    "{} command must have at least one metadata argument",
+                                    CMD_CONFIRM
+                                ),
+                            });
+                            return reply.fail();
+                        }
+                        [yes_string] => (yes_string, None),
+                        [yes_string, no_string, ..] => (yes_string, Some(no_string)),
+                    };
+                    if let Some(value) = self.callbacks.confirm(
+                        &message,
+                        yes_string,
+                        no_string.as_ref().map(|s| s.as_str()),
+                    ) {
+                        reply.ok(Some(if value { "yes" } else { "no" }.as_bytes()))
+                    } else {
+                        reply.fail()
+                    }
                 }
                 CMD_REQUEST_PUBLIC => {
                     if let Some(value) = self

@@ -10,10 +10,15 @@ to 1.0.0 are beta releases.
 
 ## [Unreleased]
 ### Added
+- `age::Callbacks::confirm` to request that the user provides confirmation for
+  some action.
 - `age::cli_common::file_io::InputReader::is_terminal`
+- `age::ssh::ParseRecipientKeyError`, which was previously in the public API but
+  unnameable and could not be matched upon.
 
 ### Changed
 - MSRV is now 1.56.0.
+- `age::Callbacks` now requires `Clone + Send + Sync + 'static` bounds.
 - `age::cli_common::file_io::OutputWriter::new` now takes an `input_is_tty`
   boolean argument. If `input_is_tty` is set to `true`, then if `OutputWriter`
   will write to a stdout TTY, it buffers the entire output so it doesn't get in

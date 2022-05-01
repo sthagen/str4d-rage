@@ -242,12 +242,29 @@ pub trait Recipient {
 ///
 /// Structs that implement this trait should be given directly to the individual
 /// `Recipient` or `Identity` implementations that require them.
-pub trait Callbacks {
+pub trait Callbacks: Clone + Send + Sync + 'static {
     /// Shows a message to the user.
     ///
     /// This can be used to prompt the user to take some physical action, such as
     /// inserting a hardware key.
     fn display_message(&self, message: &str);
+
+    /// Requests that the user provides confirmation for some action.
+    ///
+    /// This can be used to, for example, request that a hardware key the plugin wants to
+    /// try either be plugged in, or skipped.
+    ///
+    /// - `message` is the request or call-to-action to be displayed to the user.
+    /// - `yes_string` and (optionally) `no_string` will be displayed on buttons or next
+    ///   to selection options in the user's UI.
+    ///
+    /// Returns:
+    /// - `Some(true)` if the user selected the option marked with `yes_string`.
+    /// - `Some(false)` if the user selected the option marked with `no_string` (or the
+    ///   default negative confirmation label).
+    /// - `None` if the confirmation request could not be given to the user (for example,
+    ///   if there is no UI for displaying messages).
+    fn confirm(&self, message: &str, yes_string: &str, no_string: Option<&str>) -> Option<bool>;
 
     /// Requests non-private input from the user.
     ///

@@ -10,6 +10,8 @@
 
 -age = age
 -rage = rage
+-ssh-rsa = ssh-rsa
+-ssh-ed25519 = ssh-ed25519
 
 ## CLI helpers
 
@@ -67,11 +69,15 @@ encrypted-passphrase-prompt = Type passphrase for encrypted identity '{$filename
 
 encrypted-warn-no-match = Warning: encrypted identity file '{$filename}' didn't match file's recipients
 
+## Plugin identities
+
+plugin-waiting-on-binary = Waiting for {$binary_name}...
+
 ## SSH identities
 
 ssh-passphrase-prompt = Type passphrase for OpenSSH key '{$filename}'
 
-ssh-unsupported-identity = Unsupported SSH identity: {$name}
+ssh-unsupported-key = Unsupported SSH key: {$name}
 
 ssh-insecure-key-format =
     Insecure Encrypted Key Format
@@ -104,3 +110,11 @@ ssh-unsupported-cipher =
     If you would like support for this key type, please open an issue here:
 
     {$new_issue}
+
+ssh-unsupported-key-type =
+    Unsupported SSH Key Type
+    ------------------------
+    OpenSSH supports various different key types, but {-rage} only supports a
+    subset of these for backwards compatibility, specifically the '{-ssh-rsa}'
+    and '{-ssh-ed25519}' key types. This SSH key uses the unsupported key type
+    '{$key_type}'.

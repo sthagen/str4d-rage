@@ -60,8 +60,10 @@ err-plugin-recipient = '{$plugin_name}' couldn't use recipient {$recipient}: {$m
 err-plugin-multiple = Plugin returned multiple errors:
 
 err-read-identity-encrypted-without-passphrase =
-    Identity file '{$filename}' is encrypted with age but not with a passphrase.
+    Identity file '{$filename}' is encrypted with {-age} but not with a passphrase.
 err-read-identity-not-found = Identity file not found: {$filename}
+
+err-stream-last-chunk-empty = Last STREAM chunk is empty. Please report this, and/or try an older {-rage} version.
 
 ## Encrypted identities
 

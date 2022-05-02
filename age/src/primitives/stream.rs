@@ -412,6 +412,15 @@ impl<R> StreamReader<R> {
             let last = chunk.len() < ENCRYPTED_CHUNK_SIZE;
 
             self.chunk = match (self.stream.decrypt_chunk(chunk, last), last) {
+                (Ok(chunk), _)
+                    if chunk.expose_secret().is_empty() && self.cur_plaintext_pos > 0 =>
+                {
+                    assert!(last);
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        crate::fl!("err-stream-last-chunk-empty"),
+                    ));
+                }
                 (Ok(chunk), _) => Some(chunk),
                 (Err(_), false) => Some(self.stream.decrypt_chunk(chunk, true)?),
                 (Err(e), true) => return Err(e),
@@ -730,6 +739,14 @@ mod tests {
         };
 
         assert_eq!(decrypted, data);
+    }
+
+    /// Check that we can encrypt an empty slice.
+    ///
+    /// This is the sole exception to the "last chunk must be non-empty" rule.
+    #[test]
+    fn stream_round_trip_empty() {
+        stream_round_trip(&[]);
     }
 
     #[test]

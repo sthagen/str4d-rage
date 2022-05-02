@@ -7,9 +7,12 @@ and this project adheres to Rust's notion of
 to 1.0.0 are beta releases.
 
 ## [Unreleased]
+
+## [0.8.0] - 2022-05-02
 ### Added
 - `age_core::io::{DebugReader, DebugWriter}`
 - `age_core::plugin::Error::Unsupported`
+- `age_core::plugin::Reply::ok_with_metadata`
 
 ### Changed
 - MSRV is now 1.56.0.

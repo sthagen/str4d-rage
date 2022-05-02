@@ -260,7 +260,7 @@ struct AgeOptions {
     identity: Vec<String>,
 
     #[options(
-        help = "Use the plugin NAME in its default mode as an identity.",
+        help = "Use age-plugin-PLUGIN-NAME in its default mode as an identity.",
         no_long,
         short = "j"
     )]
@@ -491,6 +491,10 @@ fn decrypt(opts: AgeOptions) -> Result<(), error::DecryptError> {
 
     match age::Decryptor::new(ArmoredReader::new(input))? {
         age::Decryptor::Passphrase(decryptor) => {
+            if !opts.identity.is_empty() {
+                return Err(error::DecryptError::MixedIdentityAndPassphrase);
+            }
+
             // The `rpassword` crate opens `/dev/tty` directly on Unix, so we don't have
             // any conflict with stdin.
             #[cfg(not(unix))]

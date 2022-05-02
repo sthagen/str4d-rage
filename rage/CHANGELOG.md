@@ -9,6 +9,8 @@ and this project adheres to Rust's notion of
 to 1.0.0 are beta releases.
 
 ## [Unreleased]
+
+## [0.8.0] - 2022-05-02
 ### Changed
 - MSRV is now 1.56.0.
 - When both reading input from the terminal (e.g. if the user is typing the
@@ -21,6 +23,11 @@ to 1.0.0 are beta releases.
 - A message is now printed if a plugin takes longer than 10 seconds to encrypt
   or decrypt its header entry (for example, if the plugin is waiting on some
   user interaction that hasn't occurred yet).
+
+### Fixed
+- Decryption now returns an error when given a passphrase-encrypted file if
+  `-i/--identity` is present. Previously this could result in scripts hanging
+  forever (given that passphrase decryption is intentionally not scriptable).
 
 ## [0.7.1] - 2021-12-27
 ### Fixed

@@ -10,6 +10,20 @@ to 1.0.0 are beta releases.
 
 ## [Unreleased]
 
+## [0.8.1] - 2022-06-18
+### Security
+- `age::Decryptor` did not previously require "contributory" behaviour for
+  `X25519` recipient stanzas. If an age file has an `X25519` recipient stanza
+  with an ephemeral share that is a small-order point, the file could previously
+  be decrypted by any native age identity. To ensure we match the behaviour in
+  the [age specification](https://c2sp.org/age#x25519-recipient-stanza), these
+  files are now rejected as invalid.
+
+### Fixed
+- `age::Decryptor` now rejects invalid or non-canonical `X25519` recipient
+  stanzas (instead of ignoring or accepting them respectively), matching the
+  [age specification](https://c2sp.org/age#x25519-recipient-stanza).
+
 ## [0.8.0] - 2022-05-02
 ### Added
 - `age::Callbacks::confirm` to request that the user provides confirmation for

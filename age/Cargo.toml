@@ -68,6 +68,7 @@ zeroize = "1"
 
 # Async I/O
 futures = { version = "0.3", optional = true }
+memchr = { version = "2.5", optional = true }
 pin-project = "1"
 
 # Localization
@@ -97,6 +98,7 @@ i18n-embed = { version = "0.13", features = ["desktop-requester", "fluent-system
 quickcheck = "1"
 quickcheck_macros = "1"
 test-case = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [target.'cfg(unix)'.dev-dependencies]
 pprof = { version = "0.10", features = ["criterion", "flamegraph"] }
@@ -107,7 +109,7 @@ criterion-cycles-per-byte = "0.1"
 [features]
 default = []
 armor = []
-async = ["futures"]
+async = ["futures", "memchr"]
 cli-common = ["atty", "console", "pinentry", "rpassword"]
 plugin = ["age-core/plugin", "which", "wsl"]
 ssh = [
@@ -127,6 +129,10 @@ bench = false
 [[test]]
 name = "test_vectors"
 required-features = ["ssh"]
+
+[[test]]
+name = "testkit"
+required-features = ["armor", "async"]
 
 [[bench]]
 name = "parser"

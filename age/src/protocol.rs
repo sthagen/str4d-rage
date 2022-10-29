@@ -50,7 +50,7 @@ impl Nonce {
 /// Handles the various types of age encryption.
 enum EncryptorType {
     /// Encryption to a list of recipients identified by keys.
-    Keys(Vec<Box<dyn Recipient>>),
+    Keys(Vec<Box<dyn Recipient + Send>>),
     /// Encryption to a passphrase.
     Passphrase(SecretString),
 }
@@ -63,7 +63,7 @@ impl Encryptor {
     /// recipients.
     ///
     /// Returns `None` if no recipients were provided.
-    pub fn with_recipients(recipients: Vec<Box<dyn Recipient>>) -> Option<Self> {
+    pub fn with_recipients(recipients: Vec<Box<dyn Recipient + Send>>) -> Option<Self> {
         (!recipients.is_empty()).then(|| Encryptor(EncryptorType::Keys(recipients)))
     }
 
@@ -238,7 +238,7 @@ mod tests {
     use futures_test::task::noop_context;
 
     fn recipient_round_trip<'a>(
-        recipients: Vec<Box<dyn Recipient>>,
+        recipients: Vec<Box<dyn Recipient + Send>>,
         identities: impl Iterator<Item = &'a dyn Identity>,
     ) {
         let test_msg = b"This is a test message. For testing.";
@@ -264,7 +264,7 @@ mod tests {
 
     #[cfg(feature = "async")]
     fn recipient_async_round_trip<'a>(
-        recipients: Vec<Box<dyn Recipient>>,
+        recipients: Vec<Box<dyn Recipient + Send>>,
         identities: impl Iterator<Item = &'a dyn Identity>,
     ) {
         let test_msg = b"This is a test message. For testing.";

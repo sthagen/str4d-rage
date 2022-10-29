@@ -48,7 +48,7 @@ impl<R: io::Read> IdentityState<R> {
                 let passphrase = match callbacks.request_passphrase(&fl!(
                     crate::i18n::LANGUAGE_LOADER,
                     "encrypted-passphrase-prompt",
-                    filename = filename.as_deref().unwrap_or_default()
+                    filename = filename.unwrap_or_default()
                 )) {
                     Some(passphrase) => passphrase,
                     None => todo!(),
@@ -112,7 +112,7 @@ impl<R: io::Read, C: Callbacks> Identity<R, C> {
     ///
     /// If this encrypted identity has not been decrypted yet, calling this method will
     /// trigger a passphrase request.
-    pub fn recipients(&self) -> Result<Vec<Box<dyn crate::Recipient>>, EncryptError> {
+    pub fn recipients(&self) -> Result<Vec<Box<dyn crate::Recipient + Send>>, EncryptError> {
         match self
             .state
             .take()

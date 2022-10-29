@@ -9,6 +9,8 @@ and this project adheres to Rust's notion of
 to 1.0.0 are beta releases.
 
 ## [Unreleased]
+
+## [0.9.0] - 2022-10-27
 ### Added
 - `age::armor::ArmoredReadError`, used to wrap armor-specific read errors inside
   `std::io::Error`.
@@ -16,9 +18,13 @@ to 1.0.0 are beta releases.
   - `impl Clone for Identity`
 
 ### Changed
+- MSRV is now 1.59.0.
 - `age::Encryptor::with_recipients` now returns `Option<Encryptor>`, with `None`
   returned if the provided list of recipients is empty (to prevent files being
-  encrypted to no recipients).
+  encrypted to no recipients). The `recipients` argument is also now
+  `Vec<Box<dyn age::Recipient + Send>>`.
+- `age::encrypted::Identity::recipients` now returns
+  `Vec<Box<dyn age::Recipient + Send>>`.
 
 ### Fixed
 - `age::Decryptor` now rejects invalid or non-canonical `scrypt` recipient

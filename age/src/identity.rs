@@ -27,8 +27,8 @@ impl IdentityFileEntry {
             IdentityFileEntry::Native(i) => Ok(Box::new(i)),
             #[cfg(feature = "plugin")]
             IdentityFileEntry::Plugin(i) => Ok(Box::new(crate::plugin::IdentityPluginV1::new(
-                &i.plugin().to_owned(),
-                &[i],
+                i.plugin(),
+                &[i.clone()],
                 callbacks,
             )?)),
         }
@@ -38,12 +38,12 @@ impl IdentityFileEntry {
     pub(crate) fn to_recipient(
         &self,
         callbacks: impl Callbacks,
-    ) -> Result<Box<dyn crate::Recipient>, EncryptError> {
+    ) -> Result<Box<dyn crate::Recipient + Send>, EncryptError> {
         match self {
             IdentityFileEntry::Native(i) => Ok(Box::new(i.to_public())),
             #[cfg(feature = "plugin")]
             IdentityFileEntry::Plugin(i) => Ok(Box::new(crate::plugin::RecipientPluginV1::new(
-                &i.plugin().to_owned(),
+                i.plugin(),
                 &[],
                 &[i.clone()],
                 callbacks,

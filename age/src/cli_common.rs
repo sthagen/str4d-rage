@@ -108,7 +108,7 @@ pub fn read_identities(
     filenames: Vec<String>,
     max_work_factor: Option<u8>,
 ) -> Result<Vec<Box<dyn Identity>>, ReadError> {
-    let mut identities: Vec<Box<dyn Identity>> = vec![];
+    let mut identities: Vec<Box<dyn Identity>> = Vec::with_capacity(filenames.len());
 
     for filename in filenames {
         #[cfg(feature = "armor")]
@@ -221,8 +221,16 @@ pub fn read_secret(
     prompt: &str,
     confirm: Option<&str>,
 ) -> pinentry::Result<SecretString> {
-    if let Some(mut input) = PassphraseInput::with_default_binary() {
-        // pinentry binary is available!
+    // Check for the pinentry environment variable. If it's not present try to use the default
+    // binary.
+    let input = if let Ok(pinentry) = std::env::var("PINENTRY_PROGRAM") {
+        PassphraseInput::with_binary(pinentry)
+    } else {
+        PassphraseInput::with_default_binary()
+    };
+
+    if let Some(mut input) = input {
+        // User-set or default pinentry binary is available!
         let mismatch_error = fl!("cli-secret-input-mismatch");
         let empty_error = fl!("cli-secret-input-required");
         input

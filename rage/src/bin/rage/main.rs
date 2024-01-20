@@ -3,13 +3,15 @@
 use age::{
     armor::{ArmoredReader, ArmoredWriter, Format},
     cli_common::{
-        file_io, read_identities, read_or_generate_passphrase, read_secret, Passphrase, UiCallbacks,
+        file_io, parse_identity_files, read_identities, read_or_generate_passphrase, read_secret,
+        Passphrase, UiCallbacks,
     },
     plugin,
     secrecy::ExposeSecret,
-    Identity, IdentityFile, IdentityFileEntry, Recipient,
+    Identity, IdentityFileEntry, Recipient,
 };
 use clap::{CommandFactory, Parser};
+use i18n_embed::DesktopLanguageRequester;
 
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
@@ -39,6 +41,11 @@ macro_rules! warning {
     }};
 }
 
+/// Handles error mapping for the given SSH recipient parser.
+///
+/// Returns `Ok(None)` if the parser finds a parseable value that should be ignored. This
+/// case is for handling SSH recipient types that may occur in files we want to be able to
+/// parse, but that we do not directly support.
 #[cfg(feature = "ssh")]
 fn parse_ssh_recipient<F, G>(
     parser: F,
@@ -149,59 +156,32 @@ fn read_recipients(
         read_recipients_list(&arg, buf, &mut recipients, &mut plugin_recipients)?;
     }
 
-    for filename in identity_strings {
-        // Try parsing as an encrypted age identity.
-        if let Ok(identity) = age::encrypted::Identity::from_buffer(
-            ArmoredReader::new(BufReader::new(File::open(&filename)?)),
-            Some(filename.clone()),
-            UiCallbacks,
-            max_work_factor,
-        ) {
-            if let Some(identity) = identity {
-                recipients.extend(identity.recipients()?);
-                continue;
-            } else {
-                return Err(error::EncryptError::IdentityEncryptedWithoutPassphrase(
-                    filename,
-                ));
-            }
-        }
-
-        // Try parsing as a single multi-line SSH identity.
-        #[cfg(feature = "ssh")]
-        match age::ssh::Identity::from_buffer(
-            BufReader::new(File::open(&filename)?),
-            Some(filename.clone()),
-        ) {
-            Ok(age::ssh::Identity::Unsupported(k)) => {
-                return Err(error::EncryptError::UnsupportedKey(filename, k))
-            }
-            Ok(identity) => {
-                if let Some(recipient) = parse_ssh_recipient(
-                    || age::ssh::Recipient::try_from(identity),
-                    || Err(error::EncryptError::InvalidRecipient(filename.clone())),
-                    &filename,
-                )? {
-                    recipients.push(recipient);
-                    continue;
-                }
-            }
-            Err(_) => (),
-        }
-
-        // Try parsing as multiple single-line age identities.
-        let identity_file =
-            IdentityFile::from_file(filename.clone()).map_err(|e| match e.kind() {
-                io::ErrorKind::NotFound => error::EncryptError::IdentityNotFound(filename),
-                _ => e.into(),
-            })?;
-        for entry in identity_file.into_identities() {
+    parse_identity_files::<_, error::EncryptError>(
+        identity_strings,
+        max_work_factor,
+        &mut (&mut recipients, &mut plugin_identities),
+        |(recipients, _), identity| {
+            recipients.extend(identity.recipients()?);
+            Ok(())
+        },
+        |(recipients, _), filename, identity| {
+            let recipient = parse_ssh_recipient(
+                || age::ssh::Recipient::try_from(identity),
+                || Err(error::EncryptError::InvalidRecipient(filename.to_owned())),
+                filename,
+            )?
+            .expect("unsupported identities were already handled");
+            recipients.push(recipient);
+            Ok(())
+        },
+        |(recipients, plugin_identities), entry| {
             match entry {
                 IdentityFileEntry::Native(i) => recipients.push(Box::new(i.to_public())),
                 IdentityFileEntry::Plugin(i) => plugin_identities.push(i),
             }
-        }
-    }
+            Ok(())
+        },
+    )?;
 
     // Collect the names of the required plugins.
     let mut plugin_names = plugin_recipients
@@ -521,8 +501,9 @@ fn main() -> Result<(), error::Error> {
         .parse_default_env()
         .init();
 
-    let requested_languages = i18n::load_languages();
-    age::localizer().select(&requested_languages).unwrap();
+    let supported_languages =
+        i18n::load_languages(&DesktopLanguageRequester::requested_languages());
+    age::localizer().select(&supported_languages).unwrap();
 
     // If you are piping input with no other args, this will not allow
     // it.

@@ -583,6 +583,7 @@ impl<W: AsyncWrite> AsyncWrite for ArmoredWriter<W> {
 
 /// The various errors that can be returned while parsing the armored format.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ArmoredReadError {
     /// An error occurred while parsing Base64.
     Base64(base64::DecodeSliceError),
@@ -1400,12 +1401,10 @@ mod tests {
                         Poll::Pending => panic!("Unexpected Pending"),
                     }
                 }
-                loop {
-                    match w.as_mut().poll_close(&mut cx) {
-                        Poll::Ready(Ok(())) => break,
-                        Poll::Ready(Err(e)) => panic!("Unexpected error: {}", e),
-                        Poll::Pending => panic!("Unexpected Pending"),
-                    }
+                match w.as_mut().poll_close(&mut cx) {
+                    Poll::Ready(Ok(())) => (),
+                    Poll::Ready(Err(e)) => panic!("Unexpected error: {}", e),
+                    Poll::Pending => panic!("Unexpected Pending"),
                 }
             }
 
@@ -1554,12 +1553,10 @@ mod tests {
                     Poll::Pending => panic!("Unexpected Pending"),
                 }
             }
-            loop {
-                match w.as_mut().poll_close(&mut cx) {
-                    Poll::Ready(Ok(())) => break,
-                    Poll::Ready(Err(e)) => panic!("Unexpected error: {}", e),
-                    Poll::Pending => panic!("Unexpected Pending"),
-                }
+            match w.as_mut().poll_close(&mut cx) {
+                Poll::Ready(Ok(())) => (),
+                Poll::Ready(Err(e)) => panic!("Unexpected error: {}", e),
+                Poll::Pending => panic!("Unexpected Pending"),
             }
         }
 

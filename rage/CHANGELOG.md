@@ -11,6 +11,16 @@ to 1.0.0 are beta releases.
 [age crate]: ../age/CHANGELOG.md
 
 ## [Unreleased]
+
+### Changed
+- MSRV is now 1.85.0.
+- MSRV for `rage-mount` (behind the `mount` feature flag) is now 1.88.0.
+
+## [0.11.4, 0.12.1] - 2026-07-14
+### Fixed
+- Armored files that contain an empty final line are now correctly rejected.
+
+## [0.12.0] - 2026-07-13
 ### Added
 - Support for the new native age recipient types:
   - `age1tag1..`
@@ -18,6 +28,11 @@ to 1.0.0 are beta releases.
 
 ### Changed
 - MSRV is now 1.74.0.
+
+## [0.11.3] - 2026-07-13
+### Fixed
+- Parsing of recipient and identity files now returns an error if the input is
+  larger than the limit, instead of silently truncating.
 
 ## [0.11.2] - 2026-04-22
 ### Changed

@@ -1,6 +1,6 @@
 //! I/O helper structs for the age ASCII armor format.
 
-use base64::{prelude::BASE64_STANDARD, Engine};
+use base64::{Engine, prelude::BASE64_STANDARD};
 use pin_project::pin_project;
 use std::cmp;
 use std::error;
@@ -466,9 +466,11 @@ impl<W: AsyncWrite> ArmoredWriter<W> {
         {
             if let Some(line) = encoded_line {
                 loop {
-                    line.offset += ready!(inner
-                        .as_mut()
-                        .poll_write(cx, &encoded_buf[line.offset..line.end]))?;
+                    line.offset += ready!(
+                        inner
+                            .as_mut()
+                            .poll_write(cx, &encoded_buf[line.offset..line.end])
+                    )?;
                     if line.offset == line.end {
                         break;
                     }
@@ -822,7 +824,7 @@ impl<R> ArmoredReader<R> {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
                         ArmoredReadError::InvalidBeginMarker,
-                    ))
+                    ));
                 }
             }
         } else {
@@ -878,8 +880,8 @@ impl<R> ArmoredReader<R> {
                         ArmoredReadError::MissingPadding,
                     ));
                 }
-                (false, n) if n < ARMORED_COLUMNS_PER_LINE => {
-                    // The format may contain a single short line at the end.
+                (false, n) if 0 < n && n < ARMORED_COLUMNS_PER_LINE => {
+                    // The format may contain a single non-empty short line at the end.
                     self.found_short_line = true;
                 }
                 (true, ARMORED_COLUMNS_PER_LINE) => {
@@ -929,7 +931,7 @@ impl<R: BufRead> BufRead for ArmoredReader<R> {
                         })
                     } else {
                         Ok(&self.byte_buf[self.byte_start..self.byte_end])
-                    }
+                    };
                 }
                 Some(true) => {
                     break if self.found_end {
@@ -942,7 +944,7 @@ impl<R: BufRead> BufRead for ArmoredReader<R> {
                         }
                     } else {
                         Ok(&self.byte_buf[self.byte_start..self.byte_end])
-                    }
+                    };
                 }
             }
         }
@@ -1083,6 +1085,10 @@ impl<R: AsyncBufRead + Unpin> AsyncBufRead for ArmoredReader<R> {
                     let mut this = self.as_mut().project();
                     let available = loop {
                         let buf = ready!(this.inner.as_mut().poll_fill_buf(cx))?;
+                        if buf.is_empty() {
+                            // Stream has reached EOF.
+                            return Poll::Ready(Ok(&[]));
+                        }
                         if buf.len() >= MIN_ARMOR_LEN {
                             break buf;
                         }
@@ -1338,7 +1344,7 @@ impl<R: BufRead + Seek> Seek for ArmoredReader<R> {
 mod tests {
     use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
-    use super::{ArmoredReader, ArmoredWriter, Format, ARMORED_BYTES_PER_LINE};
+    use super::{ARMORED_BYTES_PER_LINE, ArmoredReader, ArmoredWriter, Format};
 
     #[cfg(feature = "async")]
     use futures::{
@@ -1397,13 +1403,13 @@ mod tests {
                     match w.as_mut().poll_write(&mut cx, tmp) {
                         Poll::Ready(Ok(0)) => break,
                         Poll::Ready(Ok(written)) => tmp = &tmp[written..],
-                        Poll::Ready(Err(e)) => panic!("Unexpected error: {}", e),
+                        Poll::Ready(Err(e)) => panic!("Unexpected error: {e}"),
                         Poll::Pending => panic!("Unexpected Pending"),
                     }
                 }
                 match w.as_mut().poll_close(&mut cx) {
                     Poll::Ready(Ok(())) => (),
-                    Poll::Ready(Err(e)) => panic!("Unexpected error: {}", e),
+                    Poll::Ready(Err(e)) => panic!("Unexpected error: {e}"),
                     Poll::Pending => panic!("Unexpected Pending"),
                 }
             }
@@ -1420,7 +1426,7 @@ mod tests {
                     match input.as_mut().poll_read(&mut cx, &mut tmp) {
                         Poll::Ready(Ok(0)) => break,
                         Poll::Ready(Ok(read)) => buf.extend_from_slice(&tmp[..read]),
-                        Poll::Ready(Err(e)) => panic!("Unexpected error: {}", e),
+                        Poll::Ready(Err(e)) => panic!("Unexpected error: {e}"),
                         Poll::Pending => panic!("Unexpected Pending"),
                     }
                 }
@@ -1549,13 +1555,13 @@ mod tests {
                 match w.as_mut().poll_write(&mut cx, tmp) {
                     Poll::Ready(Ok(0)) => break,
                     Poll::Ready(Ok(written)) => tmp = &tmp[written..],
-                    Poll::Ready(Err(e)) => panic!("Unexpected error: {}", e),
+                    Poll::Ready(Err(e)) => panic!("Unexpected error: {e}"),
                     Poll::Pending => panic!("Unexpected Pending"),
                 }
             }
             match w.as_mut().poll_close(&mut cx) {
                 Poll::Ready(Ok(())) => (),
-                Poll::Ready(Err(e)) => panic!("Unexpected error: {}", e),
+                Poll::Ready(Err(e)) => panic!("Unexpected error: {e}"),
                 Poll::Pending => panic!("Unexpected Pending"),
             }
         }
@@ -1580,7 +1586,7 @@ mod tests {
                 match input.as_mut().poll_read(&mut cx, &mut tmp) {
                     Poll::Ready(Ok(0)) => break,
                     Poll::Ready(Ok(read)) => buf_async.extend_from_slice(&tmp[..read]),
-                    Poll::Ready(Err(e)) => panic!("Unexpected error: {}", e),
+                    Poll::Ready(Err(e)) => panic!("Unexpected error: {e}"),
                     Poll::Pending => panic!("Unexpected Pending"),
                 }
             }

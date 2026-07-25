@@ -11,7 +11,12 @@ to 1.0.0 are beta releases.
 ## [Unreleased]
 
 ### Changed
+- MSRV is now 1.85.0.
+
+## [0.7.0] - 2026-07-13
+### Changed
 - MSRV is now 1.74.0.
+- Migrated to `age-core 0.12`.
 
 ## [0.6.1] - 2025-12-07
 ### Changed
